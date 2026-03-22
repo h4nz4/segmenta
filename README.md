@@ -16,6 +16,7 @@ If you record live sessions from platforms like **Twitch**, **YouTube**, or use 
 - ⚡ **GPU Accelerated**: Prefers your NVIDIA (NVENC), Intel (QSV), or AMD (AMF) hardware for blazing-fast HEVC encoding.
 - 📁 **Auto-Organization**: Creates beautifully named folders and files based on your preferences.
 - 📊 **Real-time Progress**: A live ASCII progress bar keeps you updated on the transcoding status.
+- 🖼️ **Preview Sheets by Default**: After each output `.mp4`, Segmenta generates a thumbnail sheet preview with a full metadata header.
 
 ---
 
@@ -55,6 +56,11 @@ Simply point Segmenta to your recordings folder:
 segmenta "C:\Recordings\Twitch" --source twitch
 ```
 
+By default, each successful output also creates a preview image in the same folder:
+
+- Output video: `.../<folder-name>.mp4`
+- Preview sheet: `.../<folder-name>_preview.jpg`
+
 ---
 
 ## 🛠️ Advanced Customization
@@ -90,6 +96,34 @@ segmenta "input" --encoder cpu --crf 22
 segmenta "input" --encoder nvenc --cq 24
 ```
 
+### Preview Sheet Generation
+
+Preview generation is enabled by default and runs on the resulting `.mp4` file.
+
+- Default layout: `3 x 9` tiles
+- Tile width: `400px`
+- Styling: black background, full technical header, per-tile timestamps
+- Performance mode: fast keyframe sampling with multithreaded decode and FFmpeg scaling
+
+Disable preview generation if needed:
+
+```bash
+segmenta "input" --no-thumbnail
+```
+
+### Source File Deletion
+
+Segmenta no longer prompts interactively to delete source `.ts` files.
+
+- Source files are kept by default.
+- To delete processed source files explicitly, use:
+
+```bash
+segmenta "input" --delete-original
+```
+
+- `--keep-ts` always preserves source files, even if `--delete-original` is set.
+
 ---
 
 ## 🌐 Supported Source Presets
@@ -108,3 +142,34 @@ Segmenta comes with built-in labels for many popular platforms:
 
 - **Python 3.10+**
 - **FFmpeg & FFprobe**: Must be installed and available in your system `PATH`.
+
+---
+
+## 📦 Publishing (PyPI + GitHub)
+
+Segmenta is published as a standard Python package and can be installed as a `uv` tool.
+
+### Install after publish
+
+```bash
+uv tool install segmenta-archiver
+```
+
+### Release flow
+
+1. Bump version in `pyproject.toml` and `src/segmenta/__init__.py`.
+2. Create and push a Git tag (for example `v0.1.2`).
+3. Create a GitHub Release from that tag.
+4. GitHub Actions will build with `uv build` and publish to PyPI automatically.
+
+### One-time PyPI setup (Trusted Publishing)
+
+In PyPI project settings, add a trusted publisher with:
+
+- **Owner**: your GitHub org/user
+- **Repository**: `segmenta` repository name
+- **PyPI Project Name**: `segmenta-archiver`
+- **Workflow**: `.github/workflows/publish.yml`
+- **Environment**: `pypi`
+
+No PyPI API token is required when using trusted publishing.

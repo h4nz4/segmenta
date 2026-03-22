@@ -16,6 +16,7 @@ from .merger import (
     resolve_encoder_choice,
     scan_and_sort_ts_files,
 )
+from .thumbnailer import Thumbnailer, ThumbnailerParams
 
 ASCII_LOGO = r"""
    _____                                 _
@@ -234,6 +235,16 @@ def main(
     crf: int = typer.Option(22, "--crf"),
     cq: int = typer.Option(22, "--cq"),
     keep_ts: bool = typer.Option(False, "--keep-ts"),
+    delete_original: bool = typer.Option(
+        False,
+        "--delete-original",
+        help="Delete processed source .ts files after successful run.",
+    ),
+    thumbnail: bool = typer.Option(
+        True,
+        "--thumbnail/--no-thumbnail",
+        help="Generate a preview thumbnail sheet after each successful output.",
+    ),
     preset: PresetOption = typer.Option("medium", "--preset"),
     on_exists: OnExistsOption = typer.Option("prompt", "--on-exists"),
     list_encoders: bool = typer.Option(False, "--list-encoders"),
@@ -323,6 +334,19 @@ def main(
     failed_count = 0
     processed_ts_files: set[Path] = set()
     output_paths: list[Path] = []
+    preview_paths: list[Path] = []
+
+    thumbnailer: Thumbnailer | None = None
+    if thumbnail:
+        thumbnailer = Thumbnailer(
+            ThumbnailerParams(
+                columns=3,
+                rows=9,
+                tile_width=400,
+                background_color="black",
+                header_font_color="white",
+            )
+        )
 
     for source_name, scene_date in sorted_group_keys:
         group_files = grouped[(source_name, scene_date)]
@@ -386,6 +410,44 @@ def main(
         typer.echo(f"Successfully created: {output_file}")
         typer.echo(f"File size: {output_file.stat().st_size / 1024 / 1024:.2f} MB")
 
+        if thumbnail and thumbnailer is not None:
+            preview_source = output_file.resolve()
+            if not preview_source.exists():
+                typer.secho(
+                    f"Warning: preview source file not found: {preview_source}",
+                    fg=typer.colors.YELLOW,
+                )
+                continue
+            preview_file = target_dir / f"{target_dir.name}_preview.jpg"
+            typer.echo(f"Generating preview from: {preview_source.name}")
+
+            def preview_progress(done: int, total: int) -> None:
+                if total <= 0:
+                    return
+                bar_width = 30
+                ratio = min(max(done / total, 0.0), 1.0)
+                filled = int(ratio * bar_width)
+                bar = "#" * filled + "-" * (bar_width - filled)
+                line = f"\r[{bar}] {done:2d}/{total:2d} frames"
+                if done >= total:
+                    line += "\n"
+                sys.stdout.write(line)
+                sys.stdout.flush()
+
+            try:
+                thumbnailer.create_and_save_preview_thumbnails_for(
+                    preview_source,
+                    preview_file,
+                    progress_callback=preview_progress,
+                )
+                preview_paths.append(preview_file)
+                typer.echo(f"Preview created: {preview_file}")
+            except Exception as exc:
+                typer.secho(
+                    f"Warning: preview generation failed for {output_file.name}: {exc}",
+                    fg=typer.colors.YELLOW,
+                )
+
     typer.echo("\nRun summary:")
     typer.echo(f"- groups total: {len(sorted_group_keys)}")
     typer.echo(f"- groups succeeded: {success_count}")
@@ -393,16 +455,16 @@ def main(
     typer.echo(f"- groups failed: {failed_count}")
     for output_path in output_paths:
         typer.echo(f"- output: {output_path}")
+    for preview_path in preview_paths:
+        typer.echo(f"- preview: {preview_path}")
 
-    if processed_ts_files and not keep_ts:
-        confirm = typer.prompt(
-            "\nDelete original processed .ts files? (y/N)", default="n"
-        )
-        if confirm.lower() == "y":
-            for ts_file in processed_ts_files:
-                if ts_file.exists():
-                    ts_file.unlink()
-            typer.echo("Deleted original processed .ts files")
+    if processed_ts_files and delete_original and not keep_ts:
+        for ts_file in sorted(processed_ts_files):
+            if ts_file.exists():
+                ts_file.unlink()
+        typer.echo("Deleted original processed .ts files")
+    elif delete_original and keep_ts:
+        typer.echo("--keep-ts is set; source .ts files were preserved.")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,14 @@
 [project]
-name = "segmenta"
-version = "0.1.0"
+name = "segmenta-archiver"
+version = "0.1.2"
 description = "Batch merge and transcode timestamped .ts recordings into organized H.265 archives"
 requires-python = ">=3.10"
-dependencies = ["typer>=0.15.0"]
+dependencies = [
+    "typer>=0.15.0",
+    "av>=9.0.0",
+    "pymediainfo>=4.3",
+    "Pillow>=9.2.0",
+]
 
 [project.scripts]
 segmenta = "segmenta.cli:run"
