@@ -14,7 +14,7 @@ from .merger import (
     merge_and_transcode,
     quality_label_for_codec,
     resolve_encoder_choice,
-    scan_and_sort_ts_files,
+    scan_and_sort_media_files,
 )
 from .thumbnailer import Thumbnailer, ThumbnailerParams
 
@@ -234,11 +234,11 @@ def main(
     encoder: EncoderOption = typer.Option("gpu", "--encoder"),
     crf: int = typer.Option(22, "--crf"),
     cq: int = typer.Option(22, "--cq"),
-    keep_ts: bool = typer.Option(False, "--keep-ts"),
+    keep_source_files: bool = typer.Option(False, "--keep-source-files"),
     delete_original: bool = typer.Option(
         False,
         "--delete-original",
-        help="Delete processed source .ts files after successful run.",
+        help="Delete processed source segment files (.ts/.mp4) after successful run.",
     ),
     thumbnail: bool = typer.Option(
         True,
@@ -316,9 +316,9 @@ def main(
             "Note: --preset applies only to CPU/libx265 and is ignored for GPU modes."
         )
 
-    parsed_files = scan_and_sort_ts_files(input_folder)
+    parsed_files = scan_and_sort_media_files(input_folder)
     if not parsed_files:
-        typer.echo(f"No valid .ts files found in {input_folder}")
+        typer.echo(f"No valid source segment files (.ts/.mp4) found in {input_folder}")
         raise typer.Exit(code=1)
 
     grouped = group_files_by_source_and_date(parsed_files)
@@ -332,7 +332,7 @@ def main(
     success_count = 0
     skipped_count = 0
     failed_count = 0
-    processed_ts_files: set[Path] = set()
+    processed_source_files: set[Path] = set()
     output_paths: list[Path] = []
     preview_paths: list[Path] = []
 
@@ -405,7 +405,7 @@ def main(
 
         success_count += 1
         output_paths.append(output_file)
-        processed_ts_files.update(parsed.path for parsed in group_files)
+        processed_source_files.update(parsed.path for parsed in group_files)
 
         typer.echo(f"Successfully created: {output_file}")
         typer.echo(f"File size: {output_file.stat().st_size / 1024 / 1024:.2f} MB")
@@ -458,13 +458,15 @@ def main(
     for preview_path in preview_paths:
         typer.echo(f"- preview: {preview_path}")
 
-    if processed_ts_files and delete_original and not keep_ts:
-        for ts_file in sorted(processed_ts_files):
-            if ts_file.exists():
-                ts_file.unlink()
-        typer.echo("Deleted original processed .ts files")
-    elif delete_original and keep_ts:
-        typer.echo("--keep-ts is set; source .ts files were preserved.")
+    if processed_source_files and delete_original and not keep_source_files:
+        for source_file in sorted(processed_source_files):
+            if source_file.exists():
+                source_file.unlink()
+        typer.echo("Deleted original processed source segment files (.ts/.mp4)")
+    elif delete_original and keep_source_files:
+        typer.echo(
+            "--keep-source-files is set; source segment files (.ts/.mp4) were preserved."
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 ![Logo](logo.png)
 
-**Segmenta** is a high-performance media utility designed to help you turn messy stream segments into a polished personal archive. It automatically groups, merges, and transcodes timestamped `.ts` files into organized H.265 (`.mp4`) libraries.
+**Segmenta** is a high-performance media utility designed to help you turn messy stream segments into a polished personal archive. It automatically groups, merges, and transcodes timestamped source files (`.ts` and `.mp4`) into organized H.265 (`.mp4`) libraries.
 
 ![Python >=3.10](https://img.shields.io/badge/python-3.10%2B-blue)
 ![FFmpeg required](https://img.shields.io/badge/ffmpeg-required-orange)
@@ -10,7 +10,7 @@
 
 ## ✨ Why Segmenta?
 
-If you record live sessions from platforms like **Twitch**, **YouTube**, or use **OBS** split recordings, you often end up with dozens of `.ts` chunks. **Segmenta** automates the tedious work:
+If you record live sessions from platforms like **Twitch**, **YouTube**, or use **OBS** split recordings, you often end up with many timestamped chunks (`.ts` or `.mp4`). **Segmenta** automates the tedious work:
 
 - 🧵 **Smart Merging**: Groups files by source and date, then joins them in perfect chronological order.
 - ⚡ **GPU Accelerated**: Prefers your NVIDIA (NVENC), Intel (QSV), or AMD (AMF) hardware for blazing-fast HEVC encoding.
@@ -42,11 +42,17 @@ uv tool install .
 
 ### 2. Prepare Your Files
 
-Ensure your input files follow this pattern: `<source>_YYYY-MM-DD_HH-MM-SS.ts`
+Ensure your input files follow one of these patterns:
 
-**Example:**
+- `<source>_YYYY-MM-DD_HH-MM-SS.ts` or `<source>_YYYY-MM-DD_HH-MM-SS.mp4`
+- `<source>-YYYYMMDD-HHMMSS.ts` or `<source>-YYYYMMDD-HHMMSS.mp4`
+
+**Examples:**
 - `shroud_2026-03-22_09-06-01.ts`
-- `shroud_2026-03-22_12-53-01.ts`
+- `shroud_2026-03-22_12-53-01.mp4`
+- `swanprincess-20260403-143120.mp4`
+
+In both formats, Segmenta extracts the model/source name and timestamp from the filename.
 
 ### 3. Run the Archiver
 
@@ -113,7 +119,7 @@ segmenta "input" --no-thumbnail
 
 ### Source File Deletion
 
-Segmenta no longer prompts interactively to delete source `.ts` files.
+Segmenta no longer prompts interactively to delete processed source segment files (`.ts`/`.mp4`).
 
 - Source files are kept by default.
 - To delete processed source files explicitly, use:
@@ -122,7 +128,7 @@ Segmenta no longer prompts interactively to delete source `.ts` files.
 segmenta "input" --delete-original
 ```
 
-- `--keep-ts` always preserves source files, even if `--delete-original` is set.
+- `--keep-source-files` always preserves source segment files, even if `--delete-original` is set.
 
 ---
 
@@ -158,7 +164,7 @@ uv tool install segmenta-archiver
 ### Release flow
 
 1. Bump version in `pyproject.toml` and `src/segmenta/__init__.py`.
-2. Create and push a Git tag (for example `v0.1.2`).
+2. Create and push a Git tag (for example `v0.1.3`).
 3. Create a GitHub Release from that tag.
 4. GitHub Actions will build with `uv build` and publish to PyPI automatically.
 

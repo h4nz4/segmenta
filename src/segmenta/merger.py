@@ -8,7 +8,6 @@ from pathlib import Path
 from string import Formatter
 from typing import NamedTuple
 
-
 TEMPLATE_KEYS = {
     "source_label",
     "source",
@@ -28,13 +27,22 @@ class ParsedFile(NamedTuple):
 
 
 def parse_filename(path: Path) -> ParsedFile | None:
-    pattern = r"^(.+)_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.ts$"
-    match = re.match(pattern, path.name)
+    patterns = [
+        r"^(.+)_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.(ts|mp4)$",
+        r"^(.+)-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(ts|mp4)$",
+    ]
+
+    match: re.Match[str] | None = None
+    for pattern in patterns:
+        match = re.match(pattern, path.name, flags=re.IGNORECASE)
+        if match:
+            break
+
     if not match:
         return None
 
     source = match.group(1)
-    year, month, day, hour, minute, second = map(int, match.groups()[1:])
+    year, month, day, hour, minute, second = map(int, match.groups()[1:7])
     try:
         timestamp = datetime(year, month, day, hour, minute, second)
     except ValueError:
@@ -43,9 +51,14 @@ def parse_filename(path: Path) -> ParsedFile | None:
     return ParsedFile(source=source, timestamp=timestamp, path=path)
 
 
-def scan_and_sort_ts_files(input_dir: Path) -> list[ParsedFile]:
+def scan_and_sort_media_files(input_dir: Path) -> list[ParsedFile]:
     parsed_files: list[ParsedFile] = []
-    for candidate in input_dir.glob("*.ts"):
+    for candidate in input_dir.iterdir():
+        if not candidate.is_file():
+            continue
+        if candidate.suffix.lower() not in {".ts", ".mp4"}:
+            continue
+
         parsed = parse_filename(candidate.resolve())
         if parsed is not None:
             parsed_files.append(parsed)
