@@ -527,3 +527,123 @@ def merge_and_transcode(
         return False
 
     return True
+
+
+def concatenate_mp4_streams(
+    parsed_files: list[ParsedFile],
+    output_path: Path,
+) -> bool:
+    if not parsed_files:
+        print("No input files provided for concatenation.")
+        return False
+
+    invalid_files = [
+        parsed.path for parsed in parsed_files if parsed.path.suffix.lower() != ".mp4"
+    ]
+    if invalid_files:
+        print("Concat-copy mode only supports .mp4 inputs.")
+        for invalid_file in invalid_files:
+            print(f"- unsupported input: {invalid_file}")
+        return False
+
+    temp_filelist = output_path.parent / "filelist.txt"
+    with open(temp_filelist, "w", encoding="utf-8", newline="\n") as filelist_handle:
+        for parsed in parsed_files:
+            escaped_path = parsed.path.as_posix().replace("'", r"'\''")
+            filelist_handle.write(f"file '{escaped_path}'\n")
+
+    total_duration_seconds = estimate_total_duration_seconds(parsed_files)
+    print("Concatenating MP4 streams without reencoding...")
+    if total_duration_seconds is not None:
+        print(f"Estimated source duration: {format_seconds(total_duration_seconds)}")
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-stats_period",
+        "1",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        temp_filelist.as_posix(),
+        "-c",
+        "copy",
+        output_path.as_posix(),
+    ]
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    out_time_seconds = 0.0
+    speed: str | None = None
+    start_time = time.time()
+    last_draw = 0.0
+
+    try:
+        if process.stdout is not None:
+            for raw_line in process.stdout:
+                line = raw_line.strip()
+                if not line or "=" not in line:
+                    continue
+
+                key, value = line.split("=", 1)
+                parsed_out_time = parse_out_time_seconds(key, value)
+                if parsed_out_time is not None:
+                    out_time_seconds = parsed_out_time
+
+                    now = time.time()
+                    if now - last_draw >= 0.25:
+                        render_progress_line(
+                            out_time_seconds=out_time_seconds,
+                            total_duration_seconds=total_duration_seconds,
+                            speed=speed,
+                            elapsed_seconds=now - start_time,
+                        )
+                        last_draw = now
+                    continue
+
+                if key == "speed":
+                    speed = value
+                elif key == "progress":
+                    now = time.time()
+                    render_progress_line(
+                        out_time_seconds=out_time_seconds,
+                        total_duration_seconds=total_duration_seconds,
+                        speed=speed,
+                        elapsed_seconds=now - start_time,
+                    )
+                    last_draw = now
+                    if value == "end":
+                        break
+
+        return_code = process.wait()
+        stderr_output = ""
+        if process.stderr is not None:
+            stderr_output = process.stderr.read().strip()
+    finally:
+        temp_filelist.unlink(missing_ok=True)
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+    if return_code != 0:
+        if stderr_output:
+            print(f"FFmpeg failed:\n{stderr_output}")
+        else:
+            print("FFmpeg failed. No additional error output from ffmpeg.")
+        return False
+
+    return True

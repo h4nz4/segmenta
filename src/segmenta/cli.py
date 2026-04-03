@@ -6,6 +6,7 @@ import typer
 
 from . import __version__
 from .merger import (
+    concatenate_mp4_streams,
     create_output_folder_name,
     create_output_folder_name_from_template,
     detect_available_hevc_encoders,
@@ -232,6 +233,11 @@ def main(
     show_label: str = typer.Option("Session", "--show-label"),
     name_template: str | None = typer.Option(None, "--name-template"),
     encoder: EncoderOption = typer.Option("gpu", "--encoder"),
+    concat_copy_mp4: bool = typer.Option(
+        False,
+        "--concat-copy-mp4",
+        help="Skip HEVC reencoding and concatenate MP4 inputs with stream copy.",
+    ),
     crf: int = typer.Option(22, "--crf"),
     cq: int = typer.Option(22, "--cq"),
     keep_source_files: bool = typer.Option(False, "--keep-source-files"),
@@ -265,13 +271,18 @@ def main(
         typer.echo("CQ must be between 0 and 51")
         raise typer.Exit(code=1)
 
-    try:
-        available_encoders = detect_available_hevc_encoders()
-    except RuntimeError as exc:
-        typer.echo(str(exc))
-        raise typer.Exit(code=1)
+    available_encoders: set[str] = set()
+    if not concat_copy_mp4:
+        try:
+            available_encoders = detect_available_hevc_encoders()
+        except RuntimeError as exc:
+            typer.echo(str(exc))
+            raise typer.Exit(code=1)
 
     if list_encoders:
+        if concat_copy_mp4:
+            typer.echo("--list-encoders cannot be used with --concat-copy-mp4")
+            raise typer.Exit(code=1)
         print_encoder_inventory(available_encoders)
         raise typer.Exit(code=0)
     if print_template_vars:
@@ -301,20 +312,24 @@ def main(
     else:
         output_dir = output_dir.resolve()
 
-    try:
-        video_codec, fell_back_to_cpu = resolve_encoder_choice(
-            encoder, available_encoders
-        )
-    except ValueError as exc:
-        typer.echo(str(exc))
-        raise typer.Exit(code=1)
+    video_codec: str | None = None
+    if not concat_copy_mp4:
+        try:
+            video_codec, fell_back_to_cpu = resolve_encoder_choice(
+                encoder, available_encoders
+            )
+        except ValueError as exc:
+            typer.echo(str(exc))
+            raise typer.Exit(code=1)
 
-    if fell_back_to_cpu:
-        typer.echo("No supported GPU HEVC encoder found, using CPU encoder libx265.")
-    if video_codec != "libx265" and preset != "medium":
-        typer.echo(
-            "Note: --preset applies only to CPU/libx265 and is ignored for GPU modes."
-        )
+        if fell_back_to_cpu:
+            typer.echo(
+                "No supported GPU HEVC encoder found, using CPU encoder libx265."
+            )
+        if video_codec != "libx265" and preset != "medium":
+            typer.echo(
+                "Note: --preset applies only to CPU/libx265 and is ignored for GPU modes."
+            )
 
     parsed_files = scan_and_sort_media_files(input_folder)
     if not parsed_files:
@@ -325,9 +340,12 @@ def main(
     sorted_group_keys = sorted(grouped.keys(), key=lambda key: (key[1], key[0]))
     print(ASCII_LOGO)
     typer.echo(f"Found {len(sorted_group_keys)} output group(s).")
-    typer.echo(
-        f"Selected encoder: {video_codec} ({quality_label_for_codec(video_codec, crf, cq)})"
-    )
+    if concat_copy_mp4:
+        typer.echo("Selected mode: concat-copy MP4 (no reencoding)")
+    elif video_codec is not None:
+        typer.echo(
+            f"Selected encoder: {video_codec} ({quality_label_for_codec(video_codec, crf, cq)})"
+        )
 
     success_count = 0
     skipped_count = 0
@@ -387,20 +405,29 @@ def main(
         typer.echo(f"Last timestamp: {group_files[-1].timestamp}")
         typer.echo(f"Output file: {output_file.name}")
 
-        success = merge_and_transcode(
-            parsed_files=group_files,
-            output_path=output_file,
-            video_codec=video_codec,
-            crf=crf,
-            cq=cq,
-            preset=preset,
-        )
+        if concat_copy_mp4:
+            success = concatenate_mp4_streams(
+                parsed_files=group_files,
+                output_path=output_file,
+            )
+        else:
+            success = merge_and_transcode(
+                parsed_files=group_files,
+                output_path=output_file,
+                video_codec=video_codec,
+                crf=crf,
+                cq=cq,
+                preset=preset,
+            )
 
         if not success:
             failed_count += 1
             if output_file.exists():
                 output_file.unlink(missing_ok=True)
-            typer.echo("Transcoding failed for this group.")
+            if concat_copy_mp4:
+                typer.echo("Concatenation failed for this group.")
+            else:
+                typer.echo("Transcoding failed for this group.")
             continue
 
         success_count += 1

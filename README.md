@@ -1,6 +1,6 @@
 ![Logo](logo.png)
 
-**Segmenta** is a high-performance media utility designed to help you turn messy stream segments into a polished personal archive. It automatically groups, merges, and transcodes timestamped source files (`.ts` and `.mp4`) into organized H.265 (`.mp4`) libraries.
+**Segmenta** is a high-performance media utility designed to help you turn messy stream segments into a polished personal archive. It automatically groups, merges, and transcodes timestamped source files (`.ts` and `.mp4`) into organized H.265 (`.mp4`) libraries, or optionally concatenates compatible MP4 segments without reencoding.
 
 ![Python >=3.10](https://img.shields.io/badge/python-3.10%2B-blue)
 ![FFmpeg required](https://img.shields.io/badge/ffmpeg-required-orange)
@@ -14,6 +14,7 @@ If you record live sessions from platforms like **Twitch**, **YouTube**, or use 
 
 - 🧵 **Smart Merging**: Groups files by source and date, then joins them in perfect chronological order.
 - ⚡ **GPU Accelerated**: Prefers your NVIDIA (NVENC), Intel (QSV), or AMD (AMF) hardware for blazing-fast HEVC encoding.
+- 🎬 **Optional Stream Copy Mode**: Skip HEVC reencoding and concatenate timestamped MP4 segments directly into one output.
 - 📁 **Auto-Organization**: Creates beautifully named folders and files based on your preferences.
 - 📊 **Real-time Progress**: A live ASCII progress bar keeps you updated on the transcoding status.
 - 🖼️ **Preview Sheets by Default**: After each output `.mp4`, Segmenta generates a thumbnail sheet preview with a full metadata header.
@@ -62,6 +63,12 @@ Simply point Segmenta to your recordings folder:
 segmenta "C:\Recordings\Twitch" --source twitch
 ```
 
+To skip HEVC reencoding and just concatenate MP4 segments in timestamp order:
+
+```bash
+segmenta "C:\Recordings\Twitch" --source twitch --concat-copy-mp4
+```
+
 By default, each successful output also creates a preview image in the same folder:
 
 - Output video: `.../<folder-name>.mp4`
@@ -100,6 +107,18 @@ segmenta "input" --encoder cpu --crf 22
 
 # Force NVIDIA NVENC
 segmenta "input" --encoder nvenc --cq 24
+```
+
+### Concatenate Without Reencoding
+
+Use `--concat-copy-mp4` to join MP4 inputs with `ffmpeg -c copy` instead of reencoding to HEVC.
+
+- Files are still grouped and merged in parsed timestamp order.
+- This mode is strict: every input in the group must be `.mp4`.
+- FFmpeg stream copy requires compatible MP4 streams across the whole group.
+
+```bash
+segmenta "input" --concat-copy-mp4
 ```
 
 ### Preview Sheet Generation
